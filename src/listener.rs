@@ -62,7 +62,30 @@ async fn handle_request(
     state: AppState,
     req: Request<hyper::body::Incoming>,
 ) -> Result<Response<Full<Bytes>>> {
-    let path = req.uri().path().trim_start_matches('/').to_string();
-    log::info!("Received request for: {}", path);
-    Ok(crate::proxy::proxy_handler(state, path).await)
+    let method = req.method().clone();
+    let uri = req.uri().clone();
+    let path = uri.path().trim_start_matches('/').to_string();
+
+    // Log incoming request
+    log::debug!("{} {}", method, uri);
+
+    // Start timing the request
+    let start = std::time::Instant::now();
+
+    // Process the request
+    let response = crate::proxy::proxy_handler(state, path).await;
+
+    // Calculate elapsed time
+    let elapsed = start.elapsed();
+
+    // Log response with status code and timing
+    log::info!(
+        "{} {} - {} ({:.3}ms)",
+        method,
+        uri,
+        response.status().as_u16(),
+        elapsed.as_secs_f64() * 1000.0
+    );
+
+    Ok(response)
 }

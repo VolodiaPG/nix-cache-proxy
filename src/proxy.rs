@@ -81,7 +81,7 @@ async fn proxy_request(state: &AppState, path: &str) -> Result<Response<Full<Byt
                 // Rewrite URLs in the response
                 let rewritten_body = rewrite_narinfo_url(&body, &upstream)?;
 
-                log::info!("Returning response from upstream: {}", upstream);
+                log::debug!("Returning response from upstream: {}", upstream);
 
                 return Ok(Response::builder()
                     .status(StatusCode::OK)
@@ -101,7 +101,7 @@ async fn proxy_request(state: &AppState, path: &str) -> Result<Response<Full<Byt
     }
 
     // No successful responses from any upstream
-    log::info!("No upstream returned a successful response");
+    log::debug!("No upstream returned a successful response");
     Ok(Response::builder()
         .status(StatusCode::NOT_FOUND)
         .body(Full::new(Bytes::from(
