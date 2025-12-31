@@ -24,8 +24,8 @@ async fn main() -> Result<()> {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    // Load configuration
-    let config = Config::from_env()?;
+    // Load configuration from CLI arguments
+    let config = Config::parse_args()?;
     tracing::info!("Loaded configuration: {:?}", config);
 
     // Create shared state
@@ -41,11 +41,49 @@ async fn main() -> Result<()> {
         .route("/{*path}", get(handle_request))
         .with_state(state);
 
-    // Start server
-    let listener = tokio::net::TcpListener::bind(&config.bind_address).await?;
-    tracing::info!("Nix cache proxy listening on {}", config.bind_address);
+    // Create listener based on configuration
+    match &config.listen_mode {
+        config::ListenMode::Tcp(addr) => {
+            let listener = tokio::net::TcpListener::bind(addr).await?;
+            tracing::info!("Nix cache proxy listening on {}", addr);
+            axum::serve(listener, app).await?;
+        }
+        config::ListenMode::Unix(path) => {
+            // Remove existing socket file if it exists
+            if path.exists() {
+                std::fs::remove_file(path)?;
+            }
 
-    axum::serve(listener, app).await?;
+            let listener = tokio::net::UnixListener::bind(path)?;
+            tracing::info!(
+                "Nix cache proxy listening on unix socket: {}",
+                path.display()
+            );
+
+            axum::serve(listener, app).await?;
+
+            // Cleanup socket file on exit
+            if path.exists() {
+                std::fs::remove_file(path)?;
+            }
+        }
+        config::ListenMode::Systemd => {
+            let mut listenfd = listenfd::ListenFd::from_env();
+
+            if let Ok(Some(listener)) = listenfd.take_tcp_listener(0) {
+                // Convert std::net::TcpListener to tokio::net::TcpListener
+                listener.set_nonblocking(true)?;
+                let listener = tokio::net::TcpListener::from_std(listener)?;
+
+                tracing::info!("Nix cache proxy using systemd socket activation");
+                axum::serve(listener, app).await?;
+            } else {
+                anyhow::bail!(
+                    "No systemd socket found. Make sure to run with systemd socket activation."
+                );
+            }
+        }
+    }
 
     Ok(())
 }

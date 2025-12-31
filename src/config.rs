@@ -1,32 +1,64 @@
 use anyhow::Result;
-use std::env;
+use clap::Parser;
+use std::path::PathBuf;
 use url::Url;
 
-#[derive(Debug, Clone)]
+/// A caching proxy for Nix binary caches
+#[derive(Parser, Debug, Clone)]
+#[command(name = "nix-cache-proxy")]
+#[command(about = "Proxy for Nix binary caches", long_about = None)]
 pub struct Config {
+    /// Bind address (TCP: 127.0.0.1:8080, Unix: unix:/path/to/socket.sock, Systemd: systemd)
+    #[arg(short, long, default_value = "127.0.0.1:8080")]
+    bind: String,
+
+    /// Upstream cache URLs (can be specified multiple times)
+    #[arg(short, long, default_value = "https://cache.nixos.org")]
+    upstream: Vec<String>,
+
+    #[clap(skip)]
+    pub listen_mode: ListenMode,
+
+    #[clap(skip)]
     pub upstreams: Vec<Url>,
-    pub bind_address: String,
+}
+
+#[derive(Debug, Clone)]
+pub enum ListenMode {
+    Tcp(String),
+    Unix(PathBuf),
+    Systemd,
+}
+
+impl Default for ListenMode {
+    fn default() -> Self {
+        ListenMode::Tcp(String::new())
+    }
 }
 
 impl Config {
-    pub fn from_env() -> Result<Self> {
-        let upstreams_str =
-            env::var("UPSTREAMS").unwrap_or_else(|_| "https://cache.nixos.org".to_string());
+    /// Parse CLI arguments and validate configuration
+    pub fn parse_args() -> Result<Self> {
+        let mut config = Config::parse();
 
-        let upstreams: Result<Vec<Url>> = upstreams_str
-            .split(',')
-            .map(|s| s.trim())
-            .filter(|s| !s.is_empty())
+        // Parse the bind address to determine the listen mode
+        config.listen_mode = if config.bind == "systemd" {
+            ListenMode::Systemd
+        } else if let Some(path) = config.bind.strip_prefix("unix:") {
+            ListenMode::Unix(PathBuf::from(path))
+        } else {
+            ListenMode::Tcp(config.bind.clone())
+        };
+
+        // Parse upstream URLs
+        config.upstreams = config
+            .upstream
+            .iter()
             .map(|s| {
                 Url::parse(s).map_err(|e| anyhow::anyhow!("Invalid upstream URL '{}': {}", s, e))
             })
-            .collect();
+            .collect::<Result<Vec<Url>>>()?;
 
-        let bind_address = env::var("BIND_ADDRESS").unwrap_or_else(|_| "127.0.0.1:8080".to_string());
-
-        Ok(Config {
-            upstreams: upstreams?,
-            bind_address,
-        })
+        Ok(config)
     }
 }
