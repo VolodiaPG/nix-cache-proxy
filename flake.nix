@@ -76,7 +76,6 @@
 
               meta = {
                 mainProgram = finalAttrs.pname;
-                maintainers = with lib.maintainers; [ xddxdd ];
                 description = "Proxy for Nix Binary Cache";
                 homepage = "https://github.com/xddxdd/nix-cache-proxy";
                 license = lib.licenses.gpl3Plus;
