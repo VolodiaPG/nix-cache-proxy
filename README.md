@@ -2,6 +2,10 @@
 
 A simple proxy server that request multiple Nix binary caches in parallel. Helps speeding up Nix daemon's binary cache lookup requests, especially with many binary caches, since Nix daemon looks them up one by one.
 
+Nix Cache Proxy only proxies `.narinfo` lookup requests. Actual NAR downloads are always directed to the source binary cache servers.
+
+Nix Cache Proxy does not modify signatures in `.narinfo`, so you still need to configure public keys for upstream caches in Nix daemon. The only change is that you can point `substituters` to Nix Cache Proxy.
+
 ## Building
 
 ```bash
@@ -87,6 +91,12 @@ The module provides the following options under `services.nix-cache-proxy`:
     ];
     timeoutSecs = 5;
   };
+
+  # Nix Cache Proxy does not modify signatures, you still need to add source binary cache public keys
+  nix.settings.trusted-public-keys = [
+    # Example: adding public key for https://attic.xuyh0120.win/lantian
+    "lantian:EeAUQ+W+6r7EtwnmYjeVwx5kOGEBpjlBfPlzGlTNvHc="
+  ];
 }
 ```
 
